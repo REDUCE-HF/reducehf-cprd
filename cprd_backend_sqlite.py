@@ -161,7 +161,7 @@ class CPRDBackend(SQLBackend):
             CAST(h.patid AS INTEGER) AS patient_id,
             CAST(h.epikey AS INTEGER) AS apcs_ident,
             {_cprd_date('h.admidate')} AS admission_date,
-            {_cprd_date('h.disdate')} AS discharge_date,
+            {_cprd_date('h.discharged')} AS discharge_date,
             NULL AS discharge_destination,
             CAST(h.dismeth AS TEXT) AS discharge_method,
             NULL AS spell_core_hrg_sus,
@@ -170,21 +170,21 @@ class CPRDBackend(SQLBackend):
             NULL AS secondary_diagnosis,
             '||' || COALESCE(diag.all_diagnoses, h.diag_01) || '||' AS all_diagnoses,
             '||' || COALESCE(proc.all_procedures, '') || '||' AS all_procedures,
-            CAST(COALESCE(cc.ccdays, 0) AS INTEGER) AS days_in_critical_care,
+            CAST(COALESCE(cc.cclev2days, 0) AS INTEGER) AS days_in_critical_care,
             CAST(h.classpat AS TEXT) AS patient_classification
         FROM hes_hospital h
         LEFT JOIN (
-            SELECT epikey, GROUP_CONCAT(diagcode, ' ,') AS all_diagnoses
+            SELECT epikey, GROUP_CONCAT(ICD, ' ,') AS all_diagnoses
             FROM hes_diagnosis
             GROUP BY epikey
         ) diag ON h.epikey = diag.epikey
         LEFT JOIN (
-            SELECT epikey, GROUP_CONCAT(proccode, ',') AS all_procedures
+            SELECT epikey, GROUP_CONCAT(OPCS, ',') AS all_procedures
             FROM hes_procedure
             GROUP BY epikey
         ) proc ON h.epikey = proc.epikey
         LEFT JOIN (
-            SELECT epikey, SUM(CAST(ccdays AS INTEGER)) AS ccdays
+            SELECT epikey, SUM(CAST(cclev2days AS INTEGER)) AS cclev2days
             FROM hes_criticalcare
             GROUP BY epikey
         ) cc ON h.epikey = cc.epikey
@@ -195,19 +195,19 @@ class CPRDBackend(SQLBackend):
     # 10=least deprived → 32800), rounded to the nearest 100 as required.
     # rural_urban_classification: 1=Urban → 3 (Urban city and town),
     #                              2=Rural → 7 (Rural village and dispersed).
-    addresses = QueryTable("""
+    addresses = QueryTable(f"""
         SELECT
             CAST(i.patid AS INTEGER) AS patient_id,
             CAST(i.patid AS INTEGER) AS address_id,
-            NULL AS start_date,
-            NULL AS end_date,
+            {_cprd_date('p.regstartdate')} AS start_date,
+            {_cprd_date('p.regenddate')} AS end_date,
             0 AS address_type,
             CASE CAST(u.e2011_urbanrural AS INTEGER)
                 WHEN 1 THEN 3
                 WHEN 2 THEN 7
                 ELSE NULL
             END AS rural_urban_classification,
-            CAST(ROUND((CAST(i.e2019_imd_10 AS INTEGER) - 1) * 32800.0 / 9, -2) AS INTEGER)
+            CAST((CAST(i.e2019_imd_10 AS INTEGER) - 1) * 32800 / 9 / 100 AS INTEGER) * 100
                 AS imd_rounded,
             NULL AS msoa_code,
             0 AS has_postcode,
@@ -215,21 +215,33 @@ class CPRDBackend(SQLBackend):
             NULL AS care_home_requires_nursing,
             NULL AS care_home_does_not_require_nursing
         FROM patient_imdcomposite i
-        LEFT JOIN patient_urbanrural u ON i.patid = u.patid
+        JOIN Patient p ON i.patid = p.patid AND i.pracid = p.pracid
+        LEFT JOIN patient_urbanrural u ON i.patid = u.patid AND i.pracid = u.pracid
     """)
 
-    # Ethnicity derived from HES A&E attendance ethnos codes.
-    # Returns the alphabetically latest valid code per patient (deterministic,
-    # not frequency-weighted as in TPP, but sufficient for synthetic testing).
+    # Ethnicity derived from gen_ethnicity in the HES APC patient table.
+    # gen_ethnicity category labels are mapped to NHS single-letter ethnicity codes.
     ethnicity_from_sus = QueryTable("""
         SELECT
             CAST(patid AS INTEGER) AS patient_id,
-            UPPER(SUBSTR(MAX(ethnos), 1, 1)) AS code
-        FROM hesae_attendance
-        WHERE ethnos IS NOT NULL
-            AND ethnos != ''
-            AND UPPER(SUBSTR(ethnos, 1, 1)) NOT IN ('X', 'Z', '9')
-        GROUP BY patid
+            CASE gen_ethnicity
+                WHEN 'White'            THEN 'A'
+                WHEN 'Mixed'            THEN 'D'
+                WHEN 'Indian'           THEN 'H'
+                WHEN 'Pakistani'        THEN 'J'
+                WHEN 'Bangladeshi'      THEN 'K'
+                WHEN 'Other_Asian'      THEN 'L'
+                WHEN 'Black_Caribbean'  THEN 'M'
+                WHEN 'Black_African'    THEN 'N'
+                WHEN 'Black_Other'      THEN 'P'
+                WHEN 'Chinese'          THEN 'R'
+                WHEN 'Other'            THEN 'S'
+                ELSE NULL
+            END AS code
+        FROM hes_patient
+        WHERE gen_ethnicity IS NOT NULL
+            AND gen_ethnicity != ''
+            AND gen_ethnicity != 'Unknown'
     """)
 
     # Household membership is not available in CPRD — return empty table.
