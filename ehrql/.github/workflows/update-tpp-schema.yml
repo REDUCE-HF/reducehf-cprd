@@ -1,0 +1,66 @@
+---
+name: "Create PR to update `tests/lib/tpp_schema.py`"
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron:  "05 1 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  create_pr_to_update_tpp_schema:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: opensafely-core/setup-action@v1
+        with:
+          install-just: true
+          install-uv: true
+          cache: uv
+
+      - name: "Update `tpp_schema.py` from published database notebook"
+        run: just update-tpp-schema
+
+      # These are problematic (in particular the flake8 hook doesn't respect
+      # the `.flake8` config file) and unnecessary as all the checks will get
+      # run on the PR anyway
+      - name: Disable pre-commit hooks
+        run: git config core.hooksPath /dev/null
+
+      - name: Generate app token
+        uses: actions/create-github-app-token@v3.2.0
+        id: generate-token
+        with:
+          app-id: 1031449  # opensafely-core Create PR app
+          private-key: ${{ secrets.CREATE_PR_APP_PRIVATE_KEY }}
+
+      - name: "Create a Pull Request if there are any changes"
+        id: create_pr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+          add-paths: tests/lib/*
+          branch: bot/update-tpp-schema
+          base: main
+          author: "opensafely-github-bot <opensafely-github-bot@users.noreply.github.com>"
+          committer: "opensafely-github-bot <opensafely-github-bot@users.noreply.github.com>"
+          commit-message: "Update TPP schema or data dictionary"
+          title: "Update TPP schema or data dictionary"
+          body: |
+            This PR was created by the `update-tpp-schema.yml` file. It means that something about the TPP schema or data dictionary has changed.
+
+            If `tpp_categorical_columns.csv` has changed then we may need to update any tables that have the values hard-coded.
+
+            If `tpp_decision_support_reference.csv` has changed then we may need to update parts of the `decision_support_values` table. E.g.
+             - if there is a new algorithm, or a new version of an existing algorithm, we may want to expose it
+             - if an existing algorithm's name has changed we may need to update our code
+
+      # The PR will still require manual approval, this just reduces it to a one-click process
+      - name: Enable automerge
+        if: steps.create_pr.outputs.pull-request-operation == 'created'
+        run: gh pr merge --auto --squash ${{ steps.create_pr.outputs.pull-request-number }}
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}

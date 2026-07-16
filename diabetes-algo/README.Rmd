@@ -1,0 +1,127 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. 
+Please edit that file and rerun in R `rmarkdown::render('README.Rmd')` or run `just render` in a Terminal -->
+
+# diabetes-algo
+
+This is the code and configuration for `diabetes-algo`, which is an R reusable action for the OpenSAFELY framework.
+
+The action:
+
+- Loads and double-checks 21 input variables
+- Runs the diabetes adjudication algorithm (Figure 1 below) to define the following Diabetes types: 
+-   Gestational, Type 2, Type 1, Other, Unlikely (variable 'cat_diabetes': GDM, T2DM, T1DM, DM_other, DM_unlikely)
+- Besides the categorical type variable, it provides the diagnosis date for each type. The default choice of diagnosis date sources for each type is:
+-   gestationaldm_date: First date from GDM clinical codes
+-   t2dm_date: First date from T1DM clinical codes, T2DM clinical codes, unspecific diabetes clinical codes, and diabetes medication codes
+-   t1dm_date: First date from T1DM clinical codes, T2DM clinical codes, unspecific diabetes clinical codes, and diabetes medication codes
+-   otherdm_date: First date from T1DM clinical codes, T2DM clinical codes, unspecific diabetes clinical codes, diabetes medication codes, and diabetes-specific procedure codes
+- Version 0.0.10 allows users to change the above-mentioned default choice of diagnosis date sources and define their own sources, see args gestationaldm_date_sources, t1dm_date_sources, t2dm_date_sources, otherdm_date_sources
+
+## Usage
+
+The input variables/arguments/options to the action are specified using the flags style (i.e., `--argname=argvalue`).
+Below, you find a detailed description of each input variable including examples for codelists to use when defining these variables in the OpenSAFELY dataset definition.
+IMPORTANT: The used codelists here are just examples. Users have to double-check these. Important is to adhere to the specified source (primary or secondary care) where these codelists should come from.
+Copy-paste the argument names into your yaml and map them to your input variable names.
+An example of a dataset definition that defines each 21 input variables, find [here](https://github.com/alainamstutz/diabetes-algo/blob/main/analysis/dataset_definition.py). 
+```{r, include=FALSE}
+# Taken from
+# https://github.com/yihui/knitr-examples/blob/master/077-wrap-output.Rmd
+library(knitr)
+hook_output <- knit_hooks$get("output")
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x <- knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x <- strwrap(x, width = n)
+    x <- paste(x, collapse = "\n")
+  }
+  hook_output(x, options)
+})
+```
+```{r, echo=FALSE, comment = '', linewidth=80}
+source_lines <- function(file, lines) {
+    source(textConnection(readLines(file)[lines]))
+}
+# Note: in the following command the last line should be the line that
+# creates the opt_parser object using OptionParser(...)
+source_lines("analysis/data_process.R", 34:122)
+optparse::print_help(opt_parser)
+```
+
+## Diabetes Adjudication Algorithm Flowchart
+
+```{r, fig.cap = "Figure 1.", fig.alt="Flowchart of the Diabetes adjudication algorithm", echo=FALSE}
+knitr::include_graphics("diabetes-algo_fig.png")
+```
+
+This action can be specified in the `project.yaml` with its options at their default values as follows, 
+where you should replace `[version]` with the latest tag from
+[here](https://github.com/opensafely-actions/diabetes-algo/tags), e.g., `v0.0.1`.
+Note that no space is allowed between `diabetes-algo:` and `[version]`.
+This action can be run specifying input arguments as follows (in YAML ">" indicates to treat the subsequent nested lines as a single line).
+
+```yaml
+generate_dataset:
+    run: ehrql:v1 generate-dataset analysis/dataset_definition.py --output output/input.arrow
+    outputs:
+      highly_sensitive:
+        dataset: output/input.arrow
+
+diabetes_algo:
+  run: >
+    diabetes-algo:[version]
+      --birth_date=your_dob_date_variable
+      --tmp_t1dm_primarycare_date=your_t1dm_from_primcare_date_variable
+      --tmp_max_hba1c_mmol_mol_num=your_max_hba1c_num_variable
+      --## more arguments
+      --df_output=data_processed.csv.gz #or data_processed.rds
+  needs:
+  - generate_dataset
+  outputs:
+    highly_sensitive:
+      csv.gz: output/data_processed.csv.gz #or data_processed.rds
+```
+
+Alternatively, the input arguments can also be specified using a `config:` key in the YAML as follows.
+Input arguments specified in the config overwrite those specified at the command line.
+
+```yaml
+generate_dataset:
+    run: ehrql:v1 generate-dataset analysis/dataset_definition.py --output output/input.arrow
+    outputs:
+      highly_sensitive:
+        dataset: output/input.arrow
+
+diabetes_algo_via_config:
+  run: diabetes-algo:[version]
+  config:
+      df_input: input.arrow
+      birth_date: your_dob_date_variable
+      tmp_t1dm_primarycare_date: your_t1dm_from_primcare_date_variable
+      ## more arguments
+      df_output: data_processed.csv.gz #or data_processed.rds
+  needs:
+  - generate_dataset
+  outputs:
+    highly_sensitive:
+      csv.gz: output/data_processed.csv.gz #or data_processed.rds
+```
+
+For more information about reusable actions see [here](https://docs.opensafely.org/actions-reusable/).
+
+# About the OpenSAFELY framework
+
+The OpenSAFELY framework is a Trusted Research Environment (TRE) for electronic
+health records research in the NHS, with a focus on public accountability and
+research quality.
+
+Read more at [OpenSAFELY.org](https://opensafely.org).
+
+# Licences
+As standard, research projects have a MIT license.

@@ -1,0 +1,246 @@
+# This is run automatically on a schedule and not worth independently testing
+# pragma: no cover file
+import csv
+import keyword
+import re
+import subprocess
+import sys
+from pathlib import Path
+from urllib.parse import urljoin, urlparse
+
+import requests
+
+
+SERVER_URL = "https://jobs.opensafely.org"
+WORKSPACE_NAME = "tpp-database-schema"
+OUTPUTS_INDEX_URL = f"{SERVER_URL}/opensafely-internal/{WORKSPACE_NAME}/outputs/"
+
+SCHEMA_DIR = Path(__file__).parent
+SCHEMA_CSV = SCHEMA_DIR / "schema.csv"
+SCHEMA_PYTHON = SCHEMA_DIR / "schema.py"
+DATA_DICTIONARY_CSV = SCHEMA_DIR / "data_dictionary.csv"
+DECISION_SUPPORT_REF_CSV = SCHEMA_DIR / "decision_support_reference.csv"
+CATEGORICAL_COLUMNS_CSV = SCHEMA_DIR / "categorical_columns.csv"
+
+TYPE_MAP = {
+    "bit": (0, lambda _: "t.Boolean"),
+    "tinyint": (0, lambda _: "t.SMALLINT"),
+    "int": (0, lambda _: "t.Integer"),
+    "bigint": (0, lambda _: "t.BIGINT"),
+    "numeric": (0, lambda _: "t.Numeric"),
+    "float": (0.0, lambda _: "t.Float"),
+    "real": (0.0, lambda _: "t.REAL"),
+    "date": ("9999-12-31", lambda _: "t.Date"),
+    "time": ("00:00:00", lambda _: "t.Time"),
+    "datetime": ("9999-12-31T00:00:00", lambda _: "t.DateTime"),
+    "char": ("", lambda col: format_string_type("t.CHAR", col)),
+    "varchar": ("", lambda col: format_string_type("t.VARCHAR", col)),
+    "varbinary": (b"", lambda col: format_binary_type("t.VARBINARY", col)),
+}
+
+
+HEADER = """\
+# This file is auto-generated: DO NOT EDIT IT
+#
+# To rebuild run:
+#
+#   python tests/backend_schemas/tpp/update_schema.py build
+#
+
+from sqlalchemy import types as t
+from sqlalchemy.orm import DeclarativeBase, mapped_column
+
+
+class Base(DeclarativeBase):
+    "Common base class to signal that models below belong to the same database"
+
+
+# This table isn't included in the schema definition TPP provide for us because it isn't
+# created or managed by TPP. Instead we create and populate this table ourselves,
+# via a command in tpp-database-utils:
+# [1]: https://github.com/opensafely-core/tpp-database-utils/blob/1c78b0777463ba73aa14abd52159a4398ff47ce7/tpp_database_utils/custom_medication_dictionary.py
+class CustomMedicationDictionary(Base):
+    __tablename__ = "CustomMedicationDictionary"
+    # Because we don't have write privileges on the main TPP database schema this table
+    # lives in our "temporary tables" database. To mimic this as closely as possible in
+    # testing we create it in a separate schema from the other tables.
+    __table_args__ = {"schema": "temp_tables.dbo"}
+
+    _pk = mapped_column(t.Integer, primary_key=True)
+
+    DMD_ID = mapped_column(t.VARCHAR(50, collation="Latin1_General_CI_AS"))
+    MultilexDrug_ID = mapped_column(t.VARCHAR(767, collation="Latin1_General_CI_AS"))
+"""
+
+
+def fetch_schema_and_data_dictionary():
+    # There's currently no API to get the latest output from a workspace so we use a
+    # regex to extract output IDs from the workspace's outputs page.
+    index_page = requests.get(OUTPUTS_INDEX_URL)
+    url_path = urlparse(index_page.url).path.rstrip("/")
+    escaped_path = re.escape(url_path)
+    url_re = re.compile(rf"{escaped_path}/(\d+)/")
+    ids = url_re.findall(index_page.text)
+    max_id = max(map(int, ids))
+    # Once we have the ID we can fetch the output manifest using the API
+    outputs_api = f"{SERVER_URL}/api/v2/workspaces/{WORKSPACE_NAME}/snapshots/{max_id}"
+    outputs = requests.get(outputs_api, headers={"Accept": "application/json"}).json()
+    # And that gives us the URLs for the files
+    file_urls = {f["name"]: f["url"] for f in outputs["files"]}
+    rows_url = urljoin(SERVER_URL, file_urls["output/files_for_release/rows.csv"])
+    SCHEMA_CSV.write_text(requests.get(rows_url).text)
+    # Output filepaths have changed, however the data_dictionary and decision_support_value_reference outputs
+    # have not, so files at the new filepaths have not been released. If they do change in future, they will be
+    # released to the new files_for_release/ subdir path, so we attempt to get that first, and fall back to the
+    # old filepath if it doesn't exist.
+    data_dictionary_filepath = file_urls.get(
+        "output/files_for_release/data_dictionary.csv",
+        file_urls["output/data_dictionary.csv"],
+    )
+    data_dictionary_url = urljoin(SERVER_URL, data_dictionary_filepath)
+    DATA_DICTIONARY_CSV.write_text(requests.get(data_dictionary_url).text)
+    decision_support_ref_filepath = file_urls.get(
+        "output/files_for_release/decision_support_value_reference.csv",
+        file_urls["output/decision_support_value_reference.csv"],
+    )
+    decision_support_ref_url = urljoin(SERVER_URL, decision_support_ref_filepath)
+    DECISION_SUPPORT_REF_CSV.write_text(requests.get(decision_support_ref_url).text)
+    categorical_columns_url = urljoin(
+        SERVER_URL,
+        file_urls["output/files_for_release/results_categorical_columns.csv"],
+    )
+    CATEGORICAL_COLUMNS_CSV.write_text(requests.get(categorical_columns_url).text)
+
+
+def build_schema():
+    lines = []
+    for table, columns in read_schema().items():
+        lines.extend(["", ""])
+        lines.append(f"class {class_name_for_table(table)}(Base):")
+        lines.append(f"    __tablename__ = {table!r}")
+        lines.append("    _pk = mapped_column(t.Integer, primary_key=True)")
+        lines.append("")
+        for column in columns:
+            attr_name = attr_name_for_column(column["ColumnName"])
+            lines.append(f"    {attr_name} = {definition_for_column(column)}")
+    write_schema(lines)
+
+
+def read_schema():
+    with SCHEMA_CSV.open(newline="") as f:
+        schema = list(csv.DictReader(f))
+    by_table = {}
+    for item in schema:
+        by_table.setdefault(item["TableName"], []).append(item)
+    # We don't include the schema information table in the schema information because
+    #  a) where would this madness end?
+    #  b) it contains some weird types like `sysname` that we don't want to have to
+    #     worry about.
+    del by_table["OpenSAFELYSchemaInformation"]
+    # Temporary code: add tables which don't yet exist in the schema but which we expect
+    # to shortly
+    add_extra_tables(by_table)
+    # Temporary code: add extra columns which don't yet exist in the schema but which we expect
+    # to shortly
+    add_extra_columns(by_table)
+    # Sort tables and columns into consistent order
+    return {name: sort_columns(columns) for name, columns in sorted(by_table.items())}
+
+
+def add_extra_tables(by_table):
+    # These tables do not yet exist in the database and/or the schema information table.
+    # Once they're included there and we publish the new schema then the automated action
+    # will create a PR which will fail until we remove the below code.
+    assert "NationalDataOptOut" not in by_table
+    by_table["NationalDataOptOut"] = [
+        {"ColumnName": "Patient_ID", "ColumnType": "bigint", "IsNullable": "False"},
+    ]
+
+
+def add_extra_columns(by_table):
+    """
+    Placeholder for adding extra columns that do not yet exist
+    Any columns included here should assert that they do NOT exist in the relevant table. This
+    will ensure that when we publish a new schema the automated action will fail if the
+    column now exists.
+    """
+
+
+def write_schema(lines):
+    code = "\n".join([HEADER] + lines)
+    code = ruff_format(code)
+    SCHEMA_PYTHON.write_text(code)
+
+
+def ruff_format(code):
+    process = subprocess.run(
+        [sys.executable, "-m", "ruff", "format", "-"],
+        check=True,
+        text=True,
+        capture_output=True,
+        input=code,
+    )
+    return process.stdout
+
+
+def sort_columns(columns):
+    # Assert column names are unique
+    assert len({c["ColumnName"] for c in columns}) == len(columns)
+    # Sort columns lexically except keep `Patient_ID` first
+    return sorted(
+        columns,
+        key=lambda c: (c["ColumnName"] != "Patient_ID", c["ColumnName"]),
+    )
+
+
+def class_name_for_table(name):
+    assert is_valid(name), name
+    return name
+
+
+def attr_name_for_column(name):
+    name = name.replace(".", "_")
+    if name == "class":
+        name = "class_"
+    assert is_valid(name), name
+    return name
+
+
+def definition_for_column(column):
+    default_value, type_formatter = TYPE_MAP[column["ColumnType"]]
+    args = [type_formatter(column)]
+    if column["IsNullable"] == "False":
+        args.append(f"nullable=False, default={default_value!r}")
+    else:
+        assert column["IsNullable"] == "True", f"Bad `IsNullable` value in {column!r}"
+    # If the name isn't a valid Python attribute then we need to supply it explicitly as
+    # the first argument
+    name = column["ColumnName"]
+    if attr_name_for_column(name) != name:
+        args.insert(0, repr(name))
+    return f"mapped_column({', '.join(args)})"
+
+
+def format_string_type(type_name, column):
+    length = column["MaxLength"]
+    collation = column["CollationName"]
+    return f"{type_name}({length}, collation={collation!r})"
+
+
+def format_binary_type(type_name, column):
+    length = column["MaxLength"]
+    return f"{type_name}({length})"
+
+
+def is_valid(name):
+    return name.isidentifier() and not keyword.iskeyword(name)
+
+
+if __name__ == "__main__":
+    command = sys.argv[1] if len(sys.argv) > 1 else None
+    if command == "fetch":
+        fetch_schema_and_data_dictionary()
+    elif command == "build":
+        build_schema()
+    else:
+        raise RuntimeError(f"Unknown command: {command}; valid commands: fetch, build")

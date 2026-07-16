@@ -1,0 +1,82 @@
+{
+  "files": {
+    "opensafely-ethnicity-snomed-0removed.csv": {
+      "id": "opensafely/ethnicity-snomed-0removed/2e641f61",
+      "url": "https://www.opencodelists.org/codelist/opensafely/ethnicity-snomed-0removed/2e641f61/",
+      "downloaded_at": "2025-01-06 21:52:13.498294Z",
+      "sha": "8b849b5b785d80306e488d0109640c8c1d2da01b"
+    },
+    "user-hjforbes-type-1-diabetes.csv": {
+      "id": "user/hjforbes/type-1-diabetes/674fbd7a",
+      "url": "https://www.opencodelists.org/codelist/user/hjforbes/type-1-diabetes/674fbd7a/",
+      "downloaded_at": "2024-12-09 16:25:14.401143Z",
+      "sha": "54a7772024e03c2129cb0c0c7ba77944eacd054a"
+    },
+    "user-hjforbes-type-2-diabetes.csv": {
+      "id": "user/hjforbes/type-2-diabetes/3530d710",
+      "url": "https://www.opencodelists.org/codelist/user/hjforbes/type-2-diabetes/3530d710/",
+      "downloaded_at": "2024-12-09 16:25:14.572591Z",
+      "sha": "08421a5b1e92d07e47cbab2e12ecd71856cee98a"
+    },
+    "user-hjforbes-other-or-nonspecific-diabetes.csv": {
+      "id": "user/hjforbes/other-or-nonspecific-diabetes/0311f0a6",
+      "url": "https://www.opencodelists.org/codelist/user/hjforbes/other-or-nonspecific-diabetes/0311f0a6/",
+      "downloaded_at": "2024-12-09 16:25:14.726858Z",
+      "sha": "1461877af2c069504535089d669e830616629f67"
+    },
+    "user-hjforbes-gestational-diabetes.csv": {
+      "id": "user/hjforbes/gestational-diabetes/1ed423d1",
+      "url": "https://www.opencodelists.org/codelist/user/hjforbes/gestational-diabetes/1ed423d1/",
+      "downloaded_at": "2024-12-09 16:25:14.911479Z",
+      "sha": "4298a4affa79a1f04130cf5c630892a25819292c"
+    },
+    "user-alainamstutz-gestational-diabetes-icd10-bristol.csv": {
+      "id": "user/alainamstutz/gestational-diabetes-icd10-bristol/474e7a09",
+      "url": "https://www.opencodelists.org/codelist/user/alainamstutz/gestational-diabetes-icd10-bristol/474e7a09/",
+      "downloaded_at": "2024-12-09 16:26:21.521030Z",
+      "sha": "f5252471f672989c537156c1dcf3a8ffaae6215d"
+    },
+    "user-alainamstutz-type-1-diabetes-secondary-care.csv": {
+      "id": "user/alainamstutz/type-1-diabetes-secondary-care/5eab6d93",
+      "url": "https://www.opencodelists.org/codelist/user/alainamstutz/type-1-diabetes-secondary-care/5eab6d93/",
+      "downloaded_at": "2025-08-04 08:15:10.607489Z",
+      "sha": "e0d47b5cbf9ace24aae5a63a8acbc583de46e120"
+    },
+    "user-alainamstutz-type-2-diabetes-secondary-care.csv": {
+      "id": "user/alainamstutz/type-2-diabetes-secondary-care/77bae0c8",
+      "url": "https://www.opencodelists.org/codelist/user/alainamstutz/type-2-diabetes-secondary-care/77bae0c8/",
+      "downloaded_at": "2025-08-04 08:15:10.654766Z",
+      "sha": "44b8f1f210c8af12a54d56a5ad2399849090e7af"
+    },
+    "user-hjforbes-nondiagnostic-diabetes-codes.csv": {
+      "id": "user/hjforbes/nondiagnostic-diabetes-codes/50f30a3b",
+      "url": "https://www.opencodelists.org/codelist/user/hjforbes/nondiagnostic-diabetes-codes/50f30a3b/",
+      "downloaded_at": "2024-12-09 16:25:15.407233Z",
+      "sha": "3b3bd24a816d04aeaaad93495d8c04772a12672f"
+    },
+    "opensafely-insulin-medication.csv": {
+      "id": "opensafely/insulin-medication/2020-04-26",
+      "url": "https://www.opencodelists.org/codelist/opensafely/insulin-medication/2020-04-26/",
+      "downloaded_at": "2024-12-09 16:25:15.578394Z",
+      "sha": "e0be9fcdb96da316ff672893b99f727ad4495364"
+    },
+    "opensafely-antidiabetic-drugs.csv": {
+      "id": "opensafely/antidiabetic-drugs/2020-07-16",
+      "url": "https://www.opencodelists.org/codelist/opensafely/antidiabetic-drugs/2020-07-16/",
+      "downloaded_at": "2024-12-09 16:25:15.790595Z",
+      "sha": "821d163d926e12fc6bd07fc78187f2756e1c221f"
+    },
+    "user-alainamstutz-non-metformin-oral-antidiabetic.csv": {
+      "id": "user/alainamstutz/non-metformin-oral-antidiabetic/0641be78",
+      "url": "https://www.opencodelists.org/codelist/user/alainamstutz/non-metformin-oral-antidiabetic/0641be78/",
+      "downloaded_at": "2025-10-14 12:18:32.585247Z",
+      "sha": "ac5144461afda949328bc75af177a4e47292ef20"
+    },
+    "opensafely-glycated-haemoglobin-hba1c-tests-numerical-value.csv": {
+      "id": "opensafely/glycated-haemoglobin-hba1c-tests-numerical-value/5134e926",
+      "url": "https://www.opencodelists.org/codelist/opensafely/glycated-haemoglobin-hba1c-tests-numerical-value/5134e926/",
+      "downloaded_at": "2024-12-09 16:25:16.137872Z",
+      "sha": "bc7e48efd370be65686755f0a843058f1ec767e0"
+    }
+  }
+}

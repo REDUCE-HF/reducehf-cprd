@@ -1,0 +1,59 @@
+---
+name: "Create PR to update `external_studies` test code"
+
+on:
+  workflow_dispatch:
+  # Once a week on Sunday afternoon
+  schedule:
+    - cron:  "21 17 * * 0"
+
+permissions:
+  contents: read
+
+jobs:
+  create_external_studies_pr:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: opensafely-core/setup-action@v1
+        with:
+          install-just: true
+          install-uv: true
+          cache: uv
+
+      - name: Update vendored copies of external study code
+        run: just update-external-studies
+
+      # These are problematic (in particular the flake8 hook doesn't respect
+      # the `.flake8` config file) and unnecessary as all the checks will get
+      # run on the PR anyway
+      - name: Disable pre-commit hooks
+        run: git config core.hooksPath /dev/null
+
+      - name: Generate app token
+        uses: actions/create-github-app-token@v3.2.0
+        id: generate-token
+        with:
+          app-id: ${{ vars.CREATE_PR_APP_ID }}
+          private-key: ${{ secrets.CREATE_PR_APP_PRIVATE_KEY }}
+
+      - name: Create a Pull Request if there are any changes
+        id: create_pr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          add-paths: tests/acceptance/external_studies/*
+          branch: bot/update-external-studies
+          base: main
+          author: "opensafely-github-bot <opensafely-github-bot@users.noreply.github.com>"
+          committer: "opensafely-github-bot <opensafely-github-bot@users.noreply.github.com>"
+          commit-message: "chore: Update `external_studies` test code"
+          title: "Update `external_studies` test code"
+          token: ${{ steps.generate-token.outputs.token }}
+
+      # The PR will still require manual approval, this just reduces it to a one-click process
+      - name: Enable automerge
+        if: steps.create_pr.outputs.pull-request-operation == 'created'
+        run: gh pr merge --auto --squash ${{ steps.create_pr.outputs.pull-request-number }}
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}

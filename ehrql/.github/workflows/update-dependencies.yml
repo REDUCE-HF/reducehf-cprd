@@ -1,0 +1,41 @@
+name: Update python dependencies
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron:  "0 4 * * WED"
+
+permissions:
+  contents: read
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v6
+    - uses: "opensafely-core/setup-action@v1"
+      with:
+        install-just: true
+        install-uv: true
+        cache: uv
+
+    - uses: actions/create-github-app-token@v3.2.0
+      id: generate-token
+      with:
+        app-id: ${{ vars.CREATE_PR_APP_ID }}
+        private-key: ${{ secrets.CREATE_PR_APP_PRIVATE_KEY }}
+
+    - uses: bennettoxford/update-dependencies-action@v1
+      id: update
+      with:
+        token: ${{ steps.generate-token.outputs.token }}
+
+    - name: Notify slack of PR
+      if: ${{ steps.update.outputs.pull-request-operation != 'none' }}
+      uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c  # v3.0.3
+      with:
+        method: chat.postMessage
+        token: ${{ secrets.BENNETTBOT_SLACK_BOT_TOKEN }}
+        payload: |
+          channel: "C080S7W2ZPX"
+          text: "Update dependencies\n${{ steps.update.outputs.pull-request-url }}"

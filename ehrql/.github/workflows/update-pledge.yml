@@ -1,0 +1,52 @@
+---
+name: "Create PR to update `bin/pledge`"
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron:  "33 2 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  create_pr_to_update_pledge:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: opensafely-core/setup-action@v1
+        with:
+          install-just: true
+          install-uv: true
+          cache: uv
+
+      - name: "Ensure `bin/pledge` is at latest version"
+        run: just update-pledge
+
+      - name: Generate app token
+        uses: actions/create-github-app-token@v3.2.0
+        id: generate-token
+        with:
+          app-id: ${{ vars.CREATE_PR_APP_ID }}
+          private-key: ${{ secrets.CREATE_PR_APP_PRIVATE_KEY }}
+
+      - name: "Create a Pull Request if there are any changes"
+        id: create_pr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          add-paths: bin/*
+          branch: bot/update-pledge
+          base: main
+          author: "opensafely-github-bot <opensafely-github-bot@users.noreply.github.com>"
+          committer: "opensafely-github-bot <opensafely-github-bot@users.noreply.github.com>"
+          commit-message: "fix: Update `bin/pledge`"
+          title: "Update `bin/pledge`"
+          token: ${{ steps.generate-token.outputs.token }}
+
+      # The PR will still require manual approval, this just reduces it to a one-click process
+      - name: Enable automerge
+        if: steps.create_pr.outputs.pull-request-operation == 'created'
+        run: gh pr merge --auto --squash ${{ steps.create_pr.outputs.pull-request-number }}
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}

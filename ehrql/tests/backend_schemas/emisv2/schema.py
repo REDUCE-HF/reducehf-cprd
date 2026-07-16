@@ -1,0 +1,45 @@
+from sqlalchemy import types as t
+from sqlalchemy.orm import DeclarativeBase, mapped_column
+from trino.sqlalchemy import datatype as trdt
+
+
+class Base(DeclarativeBase):
+    "Common base class to signal that models below belong to the same database"
+
+
+class MedicationIssueRecord(Base):
+    __tablename__ = "medication_issue_record"
+    _pk = mapped_column(t.Integer, primary_key=True)
+
+    patient_id = mapped_column(t.VARBINARY)
+    dmd_product_code_id = mapped_column(t.BIGINT)
+    effective_datetime = mapped_column(trdt.TIMESTAMP(precision=6, timezone=True))
+
+
+class Observation(Base):
+    __tablename__ = "observation"
+    _pk = mapped_column(t.Integer, primary_key=True)
+
+    patient_id = mapped_column(t.VARBINARY)
+    effective_datetime = mapped_column(trdt.TIMESTAMP(precision=6, timezone=True))
+    numeric_value = mapped_column(t.DECIMAL(precision=19, scale=3))
+    snomed_concept_id = mapped_column(t.BIGINT)
+
+
+class Patient(Base):
+    __tablename__ = "patient"
+    _pk = mapped_column(t.Integer, primary_key=True)
+
+    patient_id = mapped_column(t.VARBINARY)
+    date_of_birth = mapped_column(trdt.TIMESTAMP(precision=6, timezone=False))
+    date_of_death = mapped_column(trdt.TIMESTAMP(precision=6, timezone=False))
+    imd_rounded = mapped_column(t.DOUBLE)
+    is_consent_93c1 = mapped_column(t.BOOLEAN)
+    middle_level_super_output_area = mapped_column(t.VARCHAR)
+    registration_end_datetime = mapped_column(
+        trdt.TIMESTAMP(precision=6, timezone=False)
+    )
+    registration_start_datetime = mapped_column(
+        trdt.TIMESTAMP(precision=6, timezone=False)
+    )
+    sex = mapped_column(t.VARCHAR)

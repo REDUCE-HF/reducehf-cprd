@@ -1,0 +1,108 @@
+
+<h4 class="attr-heading" id="create_dataset" data-toc-label="create_dataset" markdown>
+  <tt><strong>create_dataset</strong>()</tt>
+</h4>
+<div markdown="block" class="indent">
+A dataset defines the patients you want to include in your population and the
+variables you want to extract for them.
+
+A dataset definition file must define a dataset called `dataset`:
+
+```python
+dataset = create_dataset()
+```
+
+Add variables to the dataset as attributes:
+
+```python
+dataset.age = patients.age_on("2020-01-01")
+```
+</div>
+
+
+<h4 class="attr-heading" id="Dataset" data-toc-label="Dataset" markdown>
+  <tt><em>class</em> <strong>Dataset</strong>()</tt>
+</h4>
+
+<div markdown="block" class="indent">
+To create a dataset use the [`create_dataset`](#create_dataset) function.
+<div class="attr-heading" id="Dataset.define_population">
+  <tt><strong>define_population</strong>(<em>population_condition</em>)</tt>
+  <a class="headerlink" href="#Dataset.define_population" title="Permanent link">🔗</a>
+</div>
+<div markdown="block" class="indent">
+Define the condition that patients must meet to be included in the Dataset, in
+the form of a [boolean patient series](#BoolPatientSeries).
+
+Example usage:
+```python
+dataset.define_population(patients.date_of_birth < "1990-01-01")
+```
+
+For more detail see the how-to guide on [defining
+populations](../how-to/define-population.md).
+</div>
+
+<div class="attr-heading" id="Dataset.add_column">
+  <tt><strong>add_column</strong>(<em>column_name</em>, <em>ehrql_query</em>)</tt>
+  <a class="headerlink" href="#Dataset.add_column" title="Permanent link">🔗</a>
+</div>
+<div markdown="block" class="indent">
+Add a column to the dataset.
+
+_column_name_<br>
+The name of the new column, as a string.
+
+_ehrql_query_<br>
+An ehrQL query that returns one row per patient.
+
+Example usage:
+```python
+dataset.add_column("age", patients.age_on("2020-01-01"))
+```
+
+Using `.add_column` is equivalent to `=` for adding a single column
+but can also be used to add multiple columns, for example by iterating
+over a dictionary. For more details see the guide on
+"[How to assign multiple columns to a dataset programmatically](../how-to/assign-multiple-columns.md)".
+</div>
+
+<div class="attr-heading" id="Dataset.configure_dummy_data">
+  <tt><strong>configure_dummy_data</strong>(<em>population_size=10</em>, <em>legacy=False</em>, <em>timeout=60</em>, <em>additional_population_constraint=None</em>)</tt>
+  <a class="headerlink" href="#Dataset.configure_dummy_data" title="Permanent link">🔗</a>
+</div>
+<div markdown="block" class="indent">
+Configure the dummy data to be generated.
+
+_population_size_<br>
+Maximum number of patients to generate.
+
+Note that you may get fewer patients than this if the generator runs out of time
+– see `timeout` below.
+
+_legacy_<br>
+Use legacy dummy data.
+
+_timeout_<br>
+Maximum time in seconds to spend generating dummy data.
+
+_additional_population_constraint_<br>
+An additional ehrQL query that can be used to constrain the population that will
+be selected for dummy data. This is incompatible with legacy mode.
+
+For example, if you wanted to ensure that two dates appear in a particular order in your
+dummy data, you could add ``additional_population_constraint = dataset.first_date <
+dataset.second_date``.
+
+You can also combine constraints with ``&`` as normal in ehrQL.
+E.g. ``additional_population_constraint = patients.sex.is_in(['male', 'female']) & (
+patients.age_on(some_date) < 80)`` would give you dummy data consisting of only men
+and women who were under the age of 80 on some particular date.
+
+Example usage:
+```python
+dataset.configure_dummy_data(population_size=10000)
+```
+</div>
+
+</div>

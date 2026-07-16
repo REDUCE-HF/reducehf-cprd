@@ -1,0 +1,68 @@
+version: '5.0'
+
+actions:
+  generate_dataset:
+    run: ehrql:v1 generate-dataset analysis/dataset_definition.py --output output/input.csv
+    outputs:
+      highly_sensitive:
+        dataset: output/input.csv
+
+  data_process:
+    run: r:v2 analysis/data_process.R --df_input input.csv --df_output data_processed.csv.gz
+    needs:
+    - generate_dataset
+    outputs:
+      highly_sensitive:
+        csv.gz: output/data_processed.csv.gz
+      #moderately_sensitive:
+      #  arguments: output/args-data_processed.csv
+
+  generate_dataset_2:
+      run: ehrql:v1 generate-dataset analysis/dataset_definition.py --output output/input2.csv
+      outputs:
+        highly_sensitive:
+          dataset: output/input2.csv
+  
+  data_process_2:
+    run: r:v2 analysis/data_process.R --df_input input2.csv --df_output data_processed_2.csv.gz
+    needs:
+    - generate_dataset_2
+    outputs:
+      highly_sensitive:
+        csv.gz: output/data_processed_2.csv.gz
+
+  generate_dataset_3:
+        run: ehrql:v1 generate-dataset analysis/dataset_definition.py --output output/input.arrow
+        outputs:
+          highly_sensitive:
+            dataset: output/input.arrow
+    
+  data_process_3:
+    run: r:v2 analysis/data_process.R
+    config:
+      df_input: input.arrow
+      remove_helper: FALSE
+      gestationaldm_date_sources: gestationaldm_date
+      t1dm_date_sources: t2dm_date,t1dm_date,otherdm_date,gestationaldm_date,tmp_diabetes_medication_date,tmp_max_hba1c_date,tmp_poccdm_date
+      t2dm_date_sources: t2dm_date,t1dm_date,otherdm_date,gestationaldm_date,tmp_diabetes_medication_date,tmp_max_hba1c_date,tmp_poccdm_date
+      otherdm_date_sources: t2dm_date,t1dm_date,otherdm_date,gestationaldm_date,tmp_diabetes_medication_date,tmp_max_hba1c_date,tmp_poccdm_date
+      df_output: data_processed_3.csv.gz
+    needs:
+    - generate_dataset_3
+    outputs:
+      highly_sensitive:
+        csv.gz: output/data_processed_3.csv.gz
+
+  generate_dataset_4:
+          run: ehrql:v1 generate-dataset analysis/dataset_definition.py --output output/input4.csv.gz
+          outputs:
+            highly_sensitive:
+              dataset: output/input4.csv.gz
+      
+  data_process_4:
+    run: r:v2 analysis/data_process.R --df_input input4.csv.gz --df_output data_processed_4.csv.gz
+    needs:
+    - generate_dataset_4
+    outputs:
+      highly_sensitive:
+        csv.gz: output/data_processed_4.csv.gz

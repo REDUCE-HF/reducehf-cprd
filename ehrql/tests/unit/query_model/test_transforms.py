@@ -1,0 +1,623 @@
+import datetime
+
+import pytest
+
+from ehrql.query_model.nodes import (
+    Case,
+    Column,
+    Dataset,
+    Filter,
+    Function,
+    Parameter,
+    PickOneRowPerPatient,
+    Position,
+    SelectColumn,
+    SelectTable,
+    Sort,
+    TableSchema,
+    Value,
+)
+from ehrql.query_model.transforms import (
+    Coalesce,
+    FixedValueMap,
+    PickOneRowPerPatientWithColumns,
+    apply_transforms,
+    rewrite_case_to_coalesce,
+    rewrite_case_to_fixed_value_map,
+    substitute_parameters,
+    unpack_conjunction,
+)
+
+
+def test_pick_one_row_per_patient_transform():
+    events = SelectTable(
+        "events",
+        schema=TableSchema(
+            date=Column(datetime.date), code=Column(str), value=Column(float)
+        ),
+    )
+    sorted_events = Sort(
+        Sort(
+            Sort(
+                events,
+                SelectColumn(events, "value"),
+            ),
+            SelectColumn(events, "code"),
+        ),
+        SelectColumn(events, "date"),
+    )
+    first_event = PickOneRowPerPatient(sorted_events, Position.FIRST)
+    dataset = dataset_factory(
+        first_code=SelectColumn(first_event, "code"),
+        first_value=SelectColumn(first_event, "value"),
+        # Create a new distinct column object with the same value as the first column:
+        # equal but not identical objects expose bugs in the query model transformation
+        first_code_again=SelectColumn(first_event, "code"),
+    )
+
+    first_event_with_columns = PickOneRowPerPatientWithColumns(
+        source=sorted_events,
+        position=Position.FIRST,
+        selected_columns=frozenset(
+            {
+                SelectColumn(
+                    source=sorted_events,
+                    name="value",
+                ),
+                SelectColumn(
+                    source=sorted_events,
+                    name="code",
+                ),
+            }
+        ),
+    )
+    expected = {
+        "first_code": SelectColumn(first_event_with_columns, "code"),
+        "first_value": SelectColumn(first_event_with_columns, "value"),
+        "first_code_again": SelectColumn(first_event_with_columns, "code"),
+    }
+
+    transformed = apply_transforms(dataset)
+    assert transformed.variables == expected
+
+
+def test_adds_one_selected_column_to_sorts():
+    events = SelectTable(
+        "events",
+        TableSchema(i1=Column(int), i2=Column(int)),
+    )
+    by_i1 = Sort(events, SelectColumn(events, "i1"))
+    variable = SelectColumn(
+        PickOneRowPerPatient(source=by_i1, position=Position.FIRST),
+        "i2",
+    )
+
+    by_i2 = Sort(events, SelectColumn(events, "i2"))
+    by_i2_then_i1 = Sort(by_i2, SelectColumn(events, "i1"))
+    expected = SelectColumn(
+        PickOneRowPerPatientWithColumns(
+            by_i2_then_i1,
+            Position.FIRST,
+            selected_columns=frozenset(
+                {
+                    SelectColumn(
+                        source=by_i2_then_i1,
+                        name="i2",
+                    ),
+                }
+            ),
+        ),
+        "i2",
+    )
+
+    assert apply_transforms(variable) == expected
+
+
+def test_adds_sorts_at_lowest_priority():
+    events = SelectTable(
+        "events",
+        TableSchema(i1=Column(int), i2=Column(int), i3=Column(int)),
+    )
+    by_i2 = Sort(events, SelectColumn(events, "i2"))
+    by_i2_then_i1 = Sort(by_i2, SelectColumn(by_i2, "i1"))
+    variable = SelectColumn(
+        PickOneRowPerPatient(source=by_i2_then_i1, position=Position.FIRST),
+        "i3",
+    )
+
+    by_i3 = Sort(events, SelectColumn(events, "i3"))
+    by_i3_then_i2 = Sort(by_i3, SelectColumn(events, "i2"))
+    by_i3_then_i2_then_i1 = Sort(by_i3_then_i2, SelectColumn(by_i3_then_i2, "i1"))
+    expected = SelectColumn(
+        PickOneRowPerPatientWithColumns(
+            by_i3_then_i2_then_i1,
+            Position.FIRST,
+            selected_columns=frozenset(
+                {
+                    SelectColumn(
+                        source=by_i3_then_i2_then_i1,
+                        name="i3",
+                    ),
+                }
+            ),
+        ),
+        "i3",
+    )
+
+    assert apply_transforms(variable) == expected
+
+
+def test_copes_with_interleaved_sorts_and_filters():
+    events = SelectTable(
+        "events",
+        TableSchema(i1=Column(int), i2=Column(int), i3=Column(int)),
+    )
+    by_i2 = Sort(events, SelectColumn(events, "i2"))
+    by_i2_filtered = Filter(by_i2, Value(True))
+    by_i2_then_i1 = Sort(by_i2_filtered, SelectColumn(by_i2_filtered, "i1"))
+    variable = SelectColumn(
+        PickOneRowPerPatient(source=by_i2_then_i1, position=Position.FIRST),
+        "i3",
+    )
+
+    by_i3 = Sort(events, SelectColumn(events, "i3"))
+    by_i3_then_i2 = Sort(by_i3, SelectColumn(events, "i2"))
+    by_i3_then_i2_filtered = Filter(by_i3_then_i2, Value(True))
+    by_i3_then_i2_then_i1 = Sort(
+        by_i3_then_i2_filtered, SelectColumn(by_i3_then_i2_filtered, "i1")
+    )
+    expected = SelectColumn(
+        PickOneRowPerPatientWithColumns(
+            by_i3_then_i2_then_i1,
+            Position.FIRST,
+            selected_columns=frozenset(
+                {
+                    SelectColumn(
+                        source=by_i3_then_i2_then_i1,
+                        name="i3",
+                    ),
+                }
+            ),
+        ),
+        "i3",
+    )
+
+    assert apply_transforms(variable) == expected
+
+
+def test_doesnt_duplicate_existing_sorts():
+    events = SelectTable(
+        "events",
+        TableSchema(i1=Column(int)),
+    )
+    by_i1 = Sort(events, SelectColumn(events, "i1"))
+    variable = SelectColumn(
+        PickOneRowPerPatient(source=by_i1, position=Position.FIRST),
+        "i1",
+    )
+
+    expected = SelectColumn(
+        PickOneRowPerPatientWithColumns(
+            by_i1,
+            Position.FIRST,
+            selected_columns=frozenset(
+                {
+                    SelectColumn(
+                        source=by_i1,
+                        name="i1",
+                    ),
+                }
+            ),
+        ),
+        "i1",
+    )
+
+    assert apply_transforms(variable) == expected
+
+
+def test_adds_sorts_in_lexical_order_of_column_names():
+    events = SelectTable(
+        "events",
+        TableSchema(i1=Column(int), iz=Column(int), ia=Column(int)),
+    )
+    by_i1 = Sort(events, SelectColumn(events, "i1"))
+    first_initial = PickOneRowPerPatient(source=by_i1, position=Position.FIRST)
+    dataset = dataset_factory(
+        z=SelectColumn(first_initial, "iz"),
+        a=SelectColumn(first_initial, "ia"),
+    )
+
+    transformed = apply_transforms(dataset)
+
+    by_iz = Sort(events, SelectColumn(events, "iz"))
+    by_iz_then_ia = Sort(by_iz, SelectColumn(events, "ia"))
+    by_iz_then_ia_then_i1 = Sort(by_iz_then_ia, SelectColumn(events, "i1"))
+    first_with_extra_sorts = PickOneRowPerPatientWithColumns(
+        by_iz_then_ia_then_i1,
+        Position.FIRST,
+        selected_columns=frozenset(
+            {
+                SelectColumn(
+                    source=by_iz_then_ia_then_i1,
+                    name="iz",
+                ),
+                SelectColumn(
+                    source=by_iz_then_ia_then_i1,
+                    name="ia",
+                ),
+            }
+        ),
+    )
+
+    expected = dict(
+        z=SelectColumn(first_with_extra_sorts, "iz"),
+        a=SelectColumn(first_with_extra_sorts, "ia"),
+    )
+
+    assert transformed.variables == expected
+
+
+def test_maps_booleans_to_a_sortable_type():
+    events = SelectTable(
+        "events",
+        TableSchema(i=Column(int), b=Column(bool)),
+    )
+    by_i = Sort(events, SelectColumn(events, "i"))
+    variable = SelectColumn(
+        PickOneRowPerPatient(source=by_i, position=Position.FIRST),
+        "b",
+    )
+
+    b = SelectColumn(events, "b")
+    by_b = Sort(events, Function.CastToInt(b))
+    by_b_then_i = Sort(by_b, SelectColumn(events, "i"))
+    expected = SelectColumn(
+        PickOneRowPerPatientWithColumns(
+            by_b_then_i,
+            Position.FIRST,
+            selected_columns=frozenset(
+                {
+                    SelectColumn(
+                        source=by_b_then_i,
+                        name="b",
+                    ),
+                }
+            ),
+        ),
+        "b",
+    )
+
+    assert apply_transforms(variable) == expected
+
+
+def test_sorts_by_derived_value_handled_correctly():
+    events = SelectTable("events", TableSchema(i=Column(int)))
+
+    by_negative_i = Sort(events, Function.Negate(SelectColumn(events, "i")))
+    variable = SelectColumn(PickOneRowPerPatient(by_negative_i, Position.FIRST), "i")
+
+    by_i = Sort(events, SelectColumn(events, "i"))
+    by_i_then_by_negative_i = Sort(by_i, Function.Negate(SelectColumn(events, "i")))
+    expected = SelectColumn(
+        PickOneRowPerPatientWithColumns(
+            by_i_then_by_negative_i,
+            Position.FIRST,
+            frozenset({SelectColumn(by_i_then_by_negative_i, "i")}),
+        ),
+        "i",
+    )
+
+    assert apply_transforms(variable) == expected
+
+
+def test_identical_operations_are_not_transformed_differently():
+    # Query model nodes are intended to be value objects: that is equality is determined
+    # by value, not identity and equal objects should be intersubstitutable. Approaches
+    # to query transformation which involve mutation can violate this principle and
+    # treat equal but non-identical nodes differently. This tests for a specific
+    # instance of this problem.
+    events = SelectTable(
+        "events",
+        TableSchema(i1=Column(int), i2=Column(int)),
+    )
+    # Construct two equal but non-identical sort-and-picks
+    first_by_i1_v1 = PickOneRowPerPatient(
+        Sort(events, SelectColumn(events, "i1")), position=Position.FIRST
+    )
+    first_by_i1_v2 = PickOneRowPerPatient(
+        Sort(events, SelectColumn(events, "i1")), position=Position.FIRST
+    )
+
+    # Select different columns from each one
+    dataset = dataset_factory(
+        i1=SelectColumn(first_by_i1_v1, "i1"),
+        i2=SelectColumn(first_by_i1_v2, "i2"),
+    )
+
+    # We expect i2 to be added at the bottom of the stack of sorts
+    by_i2_then_i1 = Sort(
+        source=Sort(source=events, sort_by=SelectColumn(source=events, name="i2")),
+        sort_by=SelectColumn(source=events, name="i1"),
+    )
+    # We expect the selected columns to include both i1 and i2
+    pick_with_columns = PickOneRowPerPatientWithColumns(
+        source=by_i2_then_i1,
+        position=Position.FIRST,
+        selected_columns=frozenset(
+            {
+                SelectColumn(by_i2_then_i1, "i1"),
+                SelectColumn(by_i2_then_i1, "i2"),
+            }
+        ),
+    )
+
+    expected = dict(
+        i1=SelectColumn(source=pick_with_columns, name="i1"),
+        i2=SelectColumn(source=pick_with_columns, name="i2"),
+    )
+
+    assert apply_transforms(dataset).variables == expected
+
+
+def test_substitute_parameters():
+    node = Function.Negate(Function.Add(Value(10), Parameter("i", int)))
+    transformed = substitute_parameters(node, i=20)
+    assert transformed == Function.Negate(Function.Add(Value(10), Value(20)))
+
+
+events = SelectTable(
+    "events", TableSchema(i1=Column(int), i2=Column(int), s1=Column(str))
+)
+i1 = SelectColumn(events, "i1")
+i2 = SelectColumn(events, "i2")
+s1 = SelectColumn(events, "s1")
+
+
+def test_specialize_case_operations_ignores_unhandled_cases():
+    case_dynamic = Case(
+        {
+            Function.LE(i1, Value(100)): Value("small"),
+            Function.GT(i1, Value(100)): Value("large"),
+        },
+        default=None,
+    )
+
+    assert apply_transforms(case_dynamic) == case_dynamic
+
+
+def test_specialize_case_operations_handles_fixed_value_maps():
+    case_fixed = Case(
+        {
+            Function.EQ(i1, Value(1)): Value("A"),
+            Function.EQ(i1, Value(2)): Value("B"),
+        },
+        default=None,
+    )
+
+    assert apply_transforms(case_fixed) == FixedValueMap(
+        source=i1,
+        mapping={
+            Value(1): Value("A"),
+            Value(2): Value("B"),
+        },
+        default=None,
+    )
+
+
+def test_rewrite_case_to_fixed_value_map_backwards_equality():
+    case = Case(
+        {
+            Function.EQ(i1, Value(1)): Value("A"),
+            # This expression is the "wrong" way round
+            Function.EQ(Value(2), i1): Value("B"),
+        },
+        default=None,
+    )
+    fixed_value_map = FixedValueMap(
+        source=i1,
+        mapping={
+            Value(1): Value("A"),
+            Value(2): Value("B"),
+        },
+        default=None,
+    )
+    assert rewrite_case_to_fixed_value_map(case) == fixed_value_map
+
+
+def test_rewrite_case_to_fixed_value_map_duplicate_values():
+    case = Case(
+        {
+            Function.EQ(i1, Value(1)): Value("A"),
+            Function.EQ(i1, Value(2)): Value("B"),
+            # This is equivalent to the first clause and so should never match
+            Function.EQ(Value(1), i1): Value("C"),
+        },
+        default=None,
+    )
+    fixed_value_map = FixedValueMap(
+        source=i1,
+        mapping={
+            Value(1): Value("A"),
+            Value(2): Value("B"),
+        },
+        default=None,
+    )
+    assert rewrite_case_to_fixed_value_map(case) == fixed_value_map
+
+
+def test_rewrite_case_to_fixed_value_map_with_default():
+    case = Case(
+        {
+            Function.EQ(i1, Value(1)): Value("A"),
+        },
+        default=Value("X"),
+    )
+    fixed_value_map = FixedValueMap(
+        source=i1,
+        mapping={
+            Value(1): Value("A"),
+        },
+        default=Value("X"),
+    )
+    assert rewrite_case_to_fixed_value_map(case) == fixed_value_map
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        # Has clauses which are not simple equality
+        Case(
+            {
+                Function.EQ(i1, Value(1)): Value("A"),
+                Function.GT(i1, Value(2)): Value("B"),
+            },
+            default=None,
+        ),
+        # Has a "then" value which is not fixed
+        Case(
+            {
+                Function.EQ(i1, Value(1)): s1,
+            },
+            default=None,
+        ),
+        # Does not use a consistent source expression
+        Case(
+            {
+                Function.EQ(i1, Value(1)): Value("A"),
+                Function.EQ(Function.Negate(i1), Value(-2)): Value("B"),
+            },
+            default=None,
+        ),
+        # Uses a dynamic value on the RHS of a clause
+        Case(
+            {
+                Function.EQ(i1, Value(1)): Value("A"),
+                Function.EQ(i1, i1): Value("B"),
+            },
+            default=None,
+        ),
+        # Uses a dynamic default
+        Case(
+            {
+                Function.EQ(i1, Value(1)): Value("A"),
+            },
+            default=s1,
+        ),
+    ],
+)
+def test_rewrite_case_to_fixed_value_map_rejects(case):
+    assert rewrite_case_to_fixed_value_map(case) is None
+
+
+def test_specialize_case_operations_handles_coalesce():
+    case_coalesce = Case(
+        {
+            Function.Not(Function.IsNull(i1)): i1,
+            Function.Not(Function.IsNull(i2)): i2,
+        },
+        default=Value(0),
+    )
+
+    assert apply_transforms(case_coalesce) == Coalesce(
+        sources=(i1, i2, Value(0)),
+    )
+
+
+def test_rewrite_case_to_coalesce_without_default():
+    case = Case(
+        {
+            Function.Not(Function.IsNull(i1)): i1,
+            Function.Not(Function.IsNull(i2)): i2,
+        },
+        default=None,
+    )
+    coalesce = Coalesce(
+        sources=(i1, i2),
+    )
+    assert rewrite_case_to_coalesce(case) == coalesce
+
+
+def test_rewrite_case_to_coalesce_with_redundant_clause():
+    case = Case(
+        {
+            Function.Not(Function.IsNull(i1)): i1,
+            Function.And(
+                Function.IsNull(i1),
+                Function.Not(Function.IsNull(i2)),
+            ): i2,
+        },
+        default=None,
+    )
+    coalesce = Coalesce(
+        sources=(i1, i2),
+    )
+    assert rewrite_case_to_coalesce(case) == coalesce
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        # Has a clause which is not a negated null check
+        Case(
+            {
+                Function.Not(Function.IsNull(i1)): i1,
+                Function.GT(i2, Value(10)): i2,
+            },
+            default=None,
+        ),
+        # Has a null "then" value
+        Case(
+            {
+                Function.Not(Function.IsNull(i1)): i1,
+                Function.Not(Function.IsNull(i2)): None,
+            },
+            default=None,
+        ),
+        # Has a clause embedded in a conjunction which is not a null check
+        Case(
+            {
+                Function.Not(Function.IsNull(i1)): i1,
+                Function.And(
+                    Function.Not(Function.IsNull(i2)),
+                    Function.GT(i2, Value(10)),
+                ): i2,
+            },
+            default=None,
+        ),
+    ],
+)
+def test_rewrite_case_to_coalesce_rejects(case):
+    assert rewrite_case_to_coalesce(case) is None
+
+
+def test_unpack_conjunction():
+    bool_1 = Function.EQ(i1, Value(1))
+    bool_2 = Function.EQ(i1, Value(2))
+    bool_3 = Function.EQ(i1, Value(3))
+    bool_4 = Function.EQ(i1, Value(4))
+    bool_5 = Function.EQ(i1, Value(5))
+    bool_6 = Function.EQ(i1, Value(6))
+
+    nested = Function.And(
+        Function.And(
+            bool_1,
+            Function.Or(bool_2, bool_3),
+        ),
+        Function.And(
+            bool_4,
+            Function.And(bool_5, bool_6),
+        ),
+    )
+    assert unpack_conjunction(nested) == {
+        bool_1,
+        Function.Or(bool_2, bool_3),
+        bool_4,
+        bool_5,
+        bool_6,
+    }
+
+
+def dataset_factory(**variables):
+    return Dataset(
+        population=Value(False), variables=variables, events={}, measures=None
+    )

@@ -1,0 +1,17 @@
+opensafely/ethnicity-snomed-0removed/2e641f61
+
+user/hjforbes/type-1-diabetes/674fbd7a
+user/hjforbes/type-2-diabetes/3530d710
+user/hjforbes/other-or-nonspecific-diabetes/0311f0a6
+user/hjforbes/gestational-diabetes/1ed423d1
+user/alainamstutz/gestational-diabetes-icd10-bristol/474e7a09
+
+user/alainamstutz/type-1-diabetes-secondary-care/5eab6d93
+user/alainamstutz/type-2-diabetes-secondary-care/77bae0c8
+user/hjforbes/nondiagnostic-diabetes-codes/50f30a3b
+
+opensafely/insulin-medication/2020-04-26
+opensafely/antidiabetic-drugs/2020-07-16
+user/alainamstutz/non-metformin-oral-antidiabetic/0641be78
+
+opensafely/glycated-haemoglobin-hba1c-tests-numerical-value/5134e926

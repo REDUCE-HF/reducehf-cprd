@@ -1,0 +1,38 @@
+---
+name: Check documentation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  documentation:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+      - uses: opensafely-core/setup-action@v1
+        with:
+          install-just: true
+          install-uv: true
+          cache: uv
+
+      - name: Check generated docs are up-to-date
+        run: just docs-check-generated-docs-are-current
+
+      # This check becomes somewhat redundant if we fix up the Cloudflare Pages preview
+      # to work with Dependabot, because the deployment will also do the build.
+      # See https://github.com/opensafely/documentation/issues/930 which documents this problem.
+      #
+      # However, for any PR, Cloudflare Pages previews sometimes fail for mysterious reasons,
+      # and this requires logging into Cloudflare Pages to inspect.
+      # So it is perhaps useful to distinguish a Cloudflare failure with an actual issue.
+      - name: Check docs build
+        run: just docs-build
