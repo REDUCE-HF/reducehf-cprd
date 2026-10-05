@@ -186,6 +186,10 @@ class CPRDBackend(SQLBackend):
     # Addresses: derived from small-area IMD and urban/rural tables.
     # imd_rounded is approximated from the IMD decile (1=most deprived → 0,
     # 10=least deprived → 32800), rounded to the nearest 100 as required.
+    # handling of IMD seems ridiculous, but its because OpenSAFELY's imd_decile is derived
+    # from imd_rounded field. We only have imd_decile in CPRD. Converting this to same range
+    # as OS's imd_rounded field means it will get converted back to decile in ehrql, meaning
+    # dataset definitions are unchanged
     # rural_urban_classification: 1=Urban → 3 (Urban city and town),
     #                              2=Rural → 7 (Rural village and dispersed).
     addresses = QueryTable(f"""
@@ -248,8 +252,9 @@ class CPRDBackend(SQLBackend):
     """)
 
     # HES A&E emergency care attendances.
-    # Diagnoses are pivoted from hesae_diagnosis (up to 3 per attendance in
-    # the synthetic data); columns diagnosis_04 through diagnosis_24 are NULL.
+    # Diagnoses are pivoted from hesae_diagnosis; 
+    # NOTE: these are AE diag codes, and therefore not useful in CPRD
+    # columns diagnosis_04 through diagnosis_24 are NULL.
     emergency_care_attendances = QueryTable(f"""
         SELECT
             CAST(a.patid AS INTEGER) AS patient_id,
