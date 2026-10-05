@@ -11,12 +11,12 @@ cd /Path/to/this/repo/docker
 docker build -t reducehf .
 ```
 
-This creates a docker container running linux, and installs conda in the container, and creates the reducehf environment
+This creates a docker container (named reducehf) running linux, installs conda in the container, and creates the reducehf conda environment (for packages installed, see [environment-linux.yaml](https://github.com/REDUCE-HF/reducehf-cprd/blob/main/docker/environment-linux.yaml))
 
 In the terminal, you can activate the container as an interactive session using:
 
 ```bash
-docker run -it -v /Path/to/this/repo/../:/workspace reducehf
+docker run -it -v /Path/to/this/repo/:/workspace reducehf
 ```
 
 Once the container is running, activate the conda environment and execute the snakemake pipeline:
