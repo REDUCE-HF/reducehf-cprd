@@ -14,3 +14,4 @@ fresh_env/
 .Rproj.user/
 .devcontainer/ehrql-main/
 .vscode/extensions.json
+/logs/*
