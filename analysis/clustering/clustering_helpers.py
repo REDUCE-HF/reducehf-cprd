@@ -1,4 +1,5 @@
 import os
+import sys
 import warnings
 warnings.filterwarnings('ignore')
 import argparse
@@ -13,7 +14,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import pairwise_distances
 from sklearn.metrics import roc_auc_score, silhouette_score, calinski_harabasz_score
-
+from sdc_helpers import apply_disclosure_control
 from config import (
     RAW_PATH, SCALED_PATH,
     MEMBERSHIP_DATE_COLS, AGE_BINS, AGE_LABELS, HOUSEHOLD_BINS, HOUSEHOLD_LABELS,
@@ -21,6 +22,13 @@ from config import (
     LTC_COLS, UNDERSERVED_COLS, CONDITION_TIME_WINDOW_DAYS, DIABETES_UNLIKELY_VALUE,
     DIAGNOSIS_PRIMARY_COL, DIAGNOSIS_HOSPITAL_COLS, umap_path
 )
+
+
+sys.path.insert(
+    0,
+    os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+)
+
 
 # ============================================
 # Common helper functions for clustering scripts
@@ -64,17 +72,7 @@ def run_pca(X_scaled, var_threshold=0.8):
     var_explained = pca.explained_variance_ratio_.sum()
     return X_pca, var_explained
 
-# ============================================
-# Disclosure control helper
-# ============================================
-def apply_disclosure_control(column, threshold):
-    """Round all values to nearest 5, 
-    and to 10 if it is below threshold and keep structural zeros."""
-    rounded = column.copy()
-    mask = (column != 0) & (column <= threshold)
-    rounded[mask] = 10
-    rounded[~mask]= (rounded[~mask]/5).round()*5
-    return rounded  
+
 
 
 
