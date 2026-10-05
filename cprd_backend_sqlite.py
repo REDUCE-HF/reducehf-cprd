@@ -1,14 +1,7 @@
 """
-ehrQL backend for synthetic CPRD Aurum data.
+ehrQL backend for CPRD Aurum data.
 
-Maps ehrql.tables.tpp tables to the unified SQLite database produced by
-synthetic-cprd/make_unified_db.py.
-
-Usage:
-    ehrql generate-dataset analysis/dataset_definition/dataset_definition_wp1_common.py \\
-        --output output/data.arrow \\
-        --backend cprd_backend.CPRDBackend \\
-        --dsn "sqlite:////path/to/synthetic-cprd/data/synthetic_cprd.db"
+Maps ehrql.tables.tpp tables to the CPRD data specification.
 
 Run from the reducehf/ directory so Python can find this module.
 
