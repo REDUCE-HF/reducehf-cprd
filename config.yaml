@@ -1,0 +1,26 @@
+# ── Database ──────────────────────────────────────────────────────────────────
+# Leave as null to use the local synthetic SQLite database.
+# For a real database, pass the DSN on the command line or via an environment
+# variable rather than writing credentials here:
+#   snakemake --config dsn="mssql+pyodbc://..."
+dsn: null
+
+# ehrQL backend class, as module.ClassName
+backend: cprd_backend_sqlite.CPRDBackend
+
+# ── Cohorts (REDUCE-HF specific) ──────────────────────────────────────────────
+# One time-dependent WP1 dataset is generated per year
+cohort_years: ["2019", "2020", "2021", "2022", "2023", "2024", "2025"]
+
+# Month and day of the index date within each cohort year (MM-DD)
+cohort_index_month_day: "02-01"
+
+# ── ehrQL runtime ─────────────────────────────────────────────────────────────
+# Directory for temporary files (SQLite scratch space and general temp files)
+tmp_dir: output
+
+# Maximum number of tables ehrQL joins in a single query
+max_join_count: 32
+
+# Where uv creates the virtual environment for ehrQL
+venv_dir: /tmp/ehrql-venv
