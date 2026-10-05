@@ -178,3 +178,36 @@ TEST_DATA_PATH  = os.path.join(OUTPUT_DIR, "test_data.csv.gz")
 
 TRAIN_DATA_PATH = os.path.join(OUTPUT_DIR, "train_data.csv.gz")
 WP4_DATA = os.path.join(PROJECT_ROOT, "output/dataset_wp4.csv.gz")
+
+#subgroups data paths
+TRAIN_SUBGROUP_DATA_PATH = os.path.join(
+    OUTPUT_DIR,
+    "train_subgroup_data.csv.gz"
+)
+
+TEST_SUBGROUP_DATA_PATH = os.path.join(
+    OUTPUT_DIR,
+    "test_subgroup_data.csv.gz"
+)
+
+#subgroup columns 
+SUBGROUP_COLS = [
+    "patient_id",
+    "hf_outcome",
+    "age_band",
+    "sex",
+    "ethnicity_cat",
+    "imd_quintile",
+    "region",
+    "rural_urban",
+    "mltc_count", 
+    "n_underserved",
+    "carehome_at_index",
+    "migrant",
+    "non_english_speaking",
+    "learndis",
+    "smi",
+    "substance_abuse",
+    "homeless",
+    "housebound",
+]
