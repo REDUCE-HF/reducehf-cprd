@@ -30,5 +30,6 @@ n.b you can use more/less cores depending on what you have available.
 
 **Notes**
 
-- the Snakefile currently takes 'synthetic_cprd_sqlite.db' as an input database. This database was created for developing the data extraction pipeline. To create a local version of this database, see <https://github.com/CharlotteJames/synthetic-cprd>. The snakefile looks for the database in the parent directory of this repo.
+- the Snakefile currently takes 'synthetic_cprd_sqlite.db' as an input database. This database was created for developing the data extraction pipeline. To create a local version of this database, see <https://github.com/CharlotteJames/synthetic-cprd>. The snakefile looks for the database in the root of this repo.
+
 
